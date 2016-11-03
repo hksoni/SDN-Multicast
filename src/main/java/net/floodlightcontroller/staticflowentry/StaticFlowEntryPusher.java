@@ -997,5 +997,13 @@ implements IOFSwitchListener, IFloodlightModule, IStaticFlowEntryPusherService, 
 			log.debug("Controller is now in STANDBY role. Clearing static flow entries from store.");
 			deleteAllFlows();
 		}
+
+		@Override
+		public void transitionToEQUAL() {
+			log.debug("Re-reading static flows from storage due " +
+					"to HA change from STANDBY,ACTIVE --> EQUAL");
+			entriesFromStorage = readEntriesFromStorage();
+			entry2dpid = computeEntry2DpidMap(entriesFromStorage);			
+		}
 	}
 }

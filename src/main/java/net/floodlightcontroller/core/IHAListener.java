@@ -57,4 +57,6 @@ public interface IHAListener extends IListener<HAListenerTypeMarker> {
     public void controllerNodeIPsChanged(Map<String, String> curControllerNodeIPs,
     									Map<String, String> addedControllerNodeIPs,
     									Map<String, String> removedControllerNodeIPs);
+
+	public void transitionToEQUAL();
 }

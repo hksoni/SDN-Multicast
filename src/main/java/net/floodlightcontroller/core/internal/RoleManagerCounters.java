@@ -9,6 +9,7 @@ import net.floodlightcontroller.debugcounter.IDebugCounterService.MetaData;
         public final String prefix = RoleManager.class.getSimpleName();
         public final IDebugCounter setSameRole;
         public final IDebugCounter setRoleMaster;
+        public final IDebugCounter setRoleEQUAL;
 
         public RoleManagerCounters(IDebugCounterService debugCounters) {
             debugCounters.registerModule(prefix);
@@ -24,6 +25,11 @@ import net.floodlightcontroller.debugcounter.IDebugCounterService.MetaData;
                                 prefix, "set-role-master",
                                 "Controller received a role request with role of " +
                                 "MASTER. This counter can be at most 1.");
+                setRoleEQUAL =
+                        debugCounters.registerCounter(
+                                    prefix, "set-role-equal",
+                                    "Controller received a role request with role of " +
+                                    "EQUAL.");
         }
 
         public String getPrefix(){

@@ -36,7 +36,13 @@ public enum HARole {
     /** This controller node is currently standing by and not managing the networking. There
      *  may be more than one STANDBY nodes in the network.
      */
-    STANDBY(OFControllerRole.ROLE_SLAVE);
+    STANDBY(OFControllerRole.ROLE_SLAVE),
+
+    /** This controller node is currently Equal. There may be more than one EQUAL nodes in the network.
+     * Synchronization with them should be done.
+     */
+    EQUAL(OFControllerRole.ROLE_EQUAL);
+  
 
     private static final Logger logger = LoggerFactory.getLogger(HARole.class);
     private final OFControllerRole ofRole;
@@ -66,6 +72,12 @@ public enum HARole {
                logger.debug("Legacy role call stack", new IllegalArgumentException());
             }
             roleString = "STANDBY";
+        } else if ("EQUAL".equals(roleString)) {
+            logger.warn("EQUAL role - switch is shared with other controllers", roleString);
+            if(logger.isDebugEnabled()) {
+               logger.debug("Legacy role call stack", new IllegalArgumentException());
+            }
+            roleString = "EQUAL";
         }
         return valueOf(roleString);
     }
@@ -77,8 +89,9 @@ public enum HARole {
     public static HARole ofOFRole(OFControllerRole role) {
         switch(role) {
             case ROLE_MASTER:
-            case ROLE_EQUAL:
                 return ACTIVE;
+            case ROLE_EQUAL:
+                return EQUAL;
             case ROLE_SLAVE:
                 return STANDBY;
             default:

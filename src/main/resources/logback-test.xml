@@ -1,4 +1,10 @@
 <configuration scan="true">
+ <appender name="FILE" class="ch.qos.logback.core.FileAppender">
+    <file>controller.log</file>
+        <encoder>
+      <pattern>%d{HH:mm:ss.SSS} %level [%logger{20}:%thread] %msg%n</pattern>
+    </encoder>
+  </appender>
   <appender name="STDOUT" class="ch.qos.logback.core.ConsoleAppender">
     <encoder>
       <pattern>%d{HH:mm:ss.SSS} %level [%logger{20}:%thread] %msg%n</pattern>
@@ -7,8 +13,7 @@
   <appender name="EV_WARN_ERR" class="net.floodlightcontroller.debugevent.DebugEventAppender">
   </appender>
   <root level="DEBUG">
-    <appender-ref ref="STDOUT" />
-    <appender-ref ref="EV_WARN_ERR" />
+    <appender-ref ref="FILE" />
   </root>
   <logger name="org" level="WARN"/>
   <logger name="io" level="INFO"></logger> <!-- Netty logging -->

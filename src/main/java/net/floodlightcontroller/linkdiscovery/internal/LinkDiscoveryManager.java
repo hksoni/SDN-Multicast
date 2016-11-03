@@ -203,6 +203,18 @@ IFloodlightModule, IInfoProvider {
 	protected final int LLDP_TO_KNOWN_INTERVAL = 20; // LLDP frequency for known
 	// links
 
+//	// Link discovery task details.
+//	protected SingletonTask discoveryTask;
+//	protected final int DISCOVERY_TASK_INTERVAL = 1;
+//	protected final int LINK_TIMEOUT = 60; // timeout as part of LLDP process.
+//	protected final int LLDP_TO_ALL_INTERVAL = 60; // 15 seconds.
+//	protected long lldpClock = 0;
+//	// This value is intentionally kept higher than LLDP_TO_ALL_INTERVAL.
+//	// If we want to identify link failures faster, we could decrease this
+//	// value to a small number, say 1 or 2 sec.
+//	protected final int LLDP_TO_KNOWN_INTERVAL = 60; // LLDP frequency for known
+//	// links
+	
 	protected LLDPTLV controllerTLV;
 	protected ReentrantReadWriteLock lock;
 	int lldpTimeCount = 0;
@@ -2100,7 +2112,7 @@ IFloodlightModule, IInfoProvider {
 				} finally {
 					if (!shuttingDown) {
 						// null role implies HA mode is not enabled.
-						if (role == null || role == HARole.ACTIVE) {
+						if (role == null || role == HARole.ACTIVE || role == HARole.EQUAL) {
 							log.trace("Rescheduling discovery task as role = {}",
 									role);
 							discoveryTask.reschedule(DISCOVERY_TASK_INTERVAL,
@@ -2115,7 +2127,7 @@ IFloodlightModule, IInfoProvider {
 		});
 
 		// null role implies HA mode is not enabled.
-		if (role == null || role == HARole.ACTIVE) {
+		if (role == null || role == HARole.ACTIVE || role == HARole.EQUAL) {
 			log.trace("Setup: Rescheduling discovery task. role = {}", role);
 			discoveryTask.reschedule(DISCOVERY_TASK_INTERVAL,
 					TimeUnit.SECONDS);
@@ -2258,6 +2270,19 @@ IFloodlightModule, IInfoProvider {
 			discoveryTask.reschedule(1, TimeUnit.MICROSECONDS);
 		}
 
+		@Override
+		public void transitionToEQUAL() {
+			if (log.isTraceEnabled()) {
+				log.trace("Sending LLDPs "
+						+ "to HA change from STANDBY or MASTER --> EQUAL");
+			}
+			LinkDiscoveryManager.this.role = HARole.EQUAL;
+			clearAllLinks();
+			//readTopologyConfigFromStorage();
+			log.debug("Role Change to EQUAL: Rescheduling discovery task.");
+			discoveryTask.reschedule(1, TimeUnit.MICROSECONDS);		
+		}
+		
 		@Override
 		public void controllerNodeIPsChanged(Map<String, String> curControllerNodeIPs,
 				Map<String, String> addedControllerNodeIPs,

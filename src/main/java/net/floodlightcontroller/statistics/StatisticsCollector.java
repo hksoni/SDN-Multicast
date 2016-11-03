@@ -1,14 +1,22 @@
 package net.floodlightcontroller.statistics;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.io.OutputStreamWriter;
 import java.lang.Thread.State;
+import java.math.BigInteger;
+import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
@@ -36,7 +44,9 @@ import net.floodlightcontroller.core.module.FloodlightModuleContext;
 import net.floodlightcontroller.core.module.FloodlightModuleException;
 import net.floodlightcontroller.core.module.IFloodlightModule;
 import net.floodlightcontroller.core.module.IFloodlightService;
+import net.floodlightcontroller.linkdiscovery.ILinkDiscoveryService;
 import net.floodlightcontroller.restserver.IRestApiService;
+import net.floodlightcontroller.routing.Link;
 import net.floodlightcontroller.statistics.web.SwitchStatisticsWebRoutable;
 import net.floodlightcontroller.threadpool.IThreadPoolService;
 import net.floodlightcontroller.topology.NodePortTuple;
@@ -47,6 +57,7 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 	private static IOFSwitchService switchService;
 	private static IThreadPoolService threadPoolService;
 	private static IRestApiService restApiService;
+	private static ILinkDiscoveryService linkDiscService;
 
 	private static boolean isEnabled = false;
 	
@@ -59,7 +70,7 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 	private static final String INTERVAL_PORT_STATS_STR = "collectionIntervalPortStatsSeconds";
 	private static final String ENABLED_STR = "enable";
 
-	private static final HashMap<NodePortTuple, SwitchPortBandwidth> portStats = new HashMap<NodePortTuple, SwitchPortBandwidth>();
+	private static final ConcurrentHashMap<NodePortTuple, SwitchPortBandwidth> portStats = new ConcurrentHashMap<NodePortTuple, SwitchPortBandwidth>();
 	private static final HashMap<NodePortTuple, SwitchPortBandwidth> tentativePortStats = new HashMap<NodePortTuple, SwitchPortBandwidth>();
 
 	/**
@@ -82,7 +93,7 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 	 *
 	 */
 	private class PortStatsCollector implements Runnable {
-
+		
 		@Override
 		public void run() {
 			Map<DatapathId, List<OFStatsReply>> replies = getSwitchStatistics(switchService.getAllSwitchDpids(), OFStatsType.PORT);
@@ -131,6 +142,62 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 							tentativePortStats.put(npt, SwitchPortBandwidth.of(npt.getNodeId(), npt.getPortId(), U64.ZERO, U64.ZERO, pse.getRxBytes(), pse.getTxBytes()));
 						}
 					}
+				}
+			}
+			writeBwStatsToFile();
+		}
+		
+		private void writeBwStatsToFile(){
+			String fileName = "./link-bw-stats.txt";
+			int len = 0;
+			NodePortTuple keyNPT = null;
+			SwitchPortBandwidth switchPortBandwidth = null;
+			Set<Link> linkPair = null;
+			Date dNow = new Date( );
+		    SimpleDateFormat ft = new SimpleDateFormat ("hh:mm:ss:SSS");
+		      
+			Map<NodePortTuple, Set<Link>> nodePortLinkMap = linkDiscService.getPortLinks();
+			BufferedWriter bw = null;
+			try {
+				bw = new BufferedWriter(new FileWriter(fileName, true));
+				bw.newLine();
+				bw.write(ft.format(dNow) + "-----");
+				for (Entry<NodePortTuple, SwitchPortBandwidth> spb: portStats.entrySet()) {
+					keyNPT = spb.getKey();
+					switchPortBandwidth = spb.getValue();
+					linkPair = nodePortLinkMap.get(keyNPT);
+					if (linkPair == null) continue;
+					for (Link l : linkPair) {
+						if (l.getSrc().getLong() == switchPortBandwidth.getSwitchId().getLong()) {
+							/*converting bits/s into kb/s*/
+							long util = switchPortBandwidth.getBitsPerSecondTx().getValue()/1000;
+							BigInteger util64 = switchPortBandwidth.getPriorByteValueTx().getBigInteger().divide(BigInteger.valueOf(1000));
+							len = l.getSrc().toString().length();
+							String link = "("+l.getSrc().toString().substring(len-2) 
+									+","+l.getDst().toString().substring(len-2)
+									+")="; 
+							if (util < 0) {
+								System.out.println("Negative bandwidth for "+link+ " "+Long.toString(util));
+								System.out.println("Negative bandwidth for "+link+ " "+Long.toString(util64.longValueExact()));
+							}
+
+							bw.write(link+Long.toString(util) + ",");
+//							bw.write(link+util64.toString() + ",");
+							bw.flush();
+						}
+					}
+				}
+				bw.close();
+			} catch (Exception e) {
+				System.out.println("Exception thrown: error in writing file named - " + fileName);
+				System.out.println(e.toString());
+			} finally {
+				try {
+					if (bw!=null)
+						bw.close();
+				} catch (IOException e) {
+					// TODO Auto-generated catch block
+					e.printStackTrace();
 				}
 			}
 		}
@@ -195,6 +262,7 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 		l.add(IOFSwitchService.class);
 		l.add(IThreadPoolService.class);
 		l.add(IRestApiService.class);
+		l.add(ILinkDiscoveryService.class);
 		return l;
 	}
 
@@ -204,7 +272,8 @@ public class StatisticsCollector implements IFloodlightModule, IStatisticsServic
 		switchService = context.getServiceImpl(IOFSwitchService.class);
 		threadPoolService = context.getServiceImpl(IThreadPoolService.class);
 		restApiService = context.getServiceImpl(IRestApiService.class);
-
+		linkDiscService = context.getServiceImpl(ILinkDiscoveryService.class);
+		
 		Map<String, String> config = context.getConfigParams(this);
 		if (config.containsKey(ENABLED_STR)) {
 			try {

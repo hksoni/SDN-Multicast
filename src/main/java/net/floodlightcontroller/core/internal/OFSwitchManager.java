@@ -148,6 +148,12 @@ public class OFSwitchManager implements IOFSwitchManager, INewOFConnectionListen
 	public void transitionToStandby() {
 		this.role = HARole.STANDBY.getOFRole();
 	}
+	
+	@Override
+	public void transitionToEQUAL() {
+		this.role = HARole.EQUAL.getOFRole();
+		
+	}
 
 	/** IOFSwitchManager Implementation **/
 
@@ -1169,4 +1175,6 @@ public class OFSwitchManager implements IOFSwitchManager, INewOFConnectionListen
             addUpdateToQueue(update);
         }*/
 	}
+
+
 }

@@ -118,6 +118,17 @@ public class RoleManager {
             // it will be a to MASTER transition
             counters.setRoleMaster.increment();
         }
+        
+        if (role == HARole.EQUAL) {
+        	if (this.getRole() == HARole.ACTIVE) {
+        		counters.setRoleEQUAL.increment();
+        	} else { // previous role was STANDBY
+        		//TODO: handle standby to EQUAL 
+        		log.debug("Received role request for {} but controller is "
+                        + "in {}. returning as of now.", role, this.getRole());
+        		return;
+        	}
+        }
 
         log.info("Received role request for {} (reason: {})."
                 + " Initiating transition", role, roleChangeDescription);
@@ -158,6 +169,13 @@ public class RoleManager {
              setRole(HARole.ACTIVE, "Leader election assigned ACTIVE role");
          }
      }
+    
+    private void attemptEqualTransition() {
+        if(!switchesHaveAnotherMaster()){
+            // No valid cluster controller connections found, become ACTIVE!
+            setRole(HARole.EQUAL, "assigned EQUAL role");
+        }
+    }
 
     /**
      * Iterates over all the switches and checks to see if they have controller
@@ -213,6 +231,8 @@ public class RoleManager {
                         break;
                     case STANDBY:
                         listener.transitionToStandby();
+                    case EQUAL:
+                        listener.transitionToEQUAL();
                         break;
                 }
            }

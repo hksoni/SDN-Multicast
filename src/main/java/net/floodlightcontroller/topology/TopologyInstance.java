@@ -655,6 +655,7 @@ public class TopologyInstance {
 		return ret;
 	}
 	
+   
     /*
 	 * Modification of the calculateShortestPathTreeInClusters (dealing with whole topology, not individual clusters)
 	 */

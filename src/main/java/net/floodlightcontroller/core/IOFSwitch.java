@@ -80,6 +80,10 @@ public interface IOFSwitch extends IOFMessageWriter {
        /** the switch has been sorted out and quarantined by the handshake. It does not show up
         *  in normal switch listings
         */
+       EQUAL(true),
+       /** the switch has been sorted out and quarantined by the handshake. It does not show up
+        *  in normal switch listings
+        */
        QUARANTINED(false),
        /** the switch has disconnected, and will soon be removed from the switch database */
        DISCONNECTED(false);
@@ -97,7 +101,7 @@ public interface IOFSwitch extends IOFMessageWriter {
 
        /** wether this switch is currently ready to be controlled by this controller */
        public boolean isControllable() {
-            return this == MASTER;
+            return (this == MASTER || this == EQUAL);
        }
     }
 

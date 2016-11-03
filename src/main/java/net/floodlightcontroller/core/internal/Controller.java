@@ -408,7 +408,7 @@ public class Controller implements IFloodlightProviderService, IStorageSourceLis
      *
      * Handle and dispatch a message to IOFMessageListeners.
      *
-     * We only dispatch messages to listeners if the controller's role is MASTER.
+     * We only dispatch messages to listeners if the controller's role is MASTER or EQUAL
      *
      * @param sw The switch sending the message
      * @param m The message the switch sent

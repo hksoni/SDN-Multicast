@@ -408,9 +408,12 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 				sw.setAttribute(IOFSwitch.SWITCH_SUPPORTS_NX_ROLE, false);
 			sw.setControllerRole(role);
 
-			if (role != OFControllerRole.ROLE_SLAVE) {
+			if (role == OFControllerRole.ROLE_MASTER) {
 				OFSwitchHandshakeHandler.this.setState(new MasterState());
+			} else if (role == OFControllerRole.ROLE_EQUAL) {
+				OFSwitchHandshakeHandler.this.setState(new EqualState());
 			} else {
+			
 				if (status != RoleRecvStatus.RECEIVED_REPLY) {
 					if (log.isDebugEnabled()) {
 						log.debug("Disconnecting switch {}. Doesn't support role"
@@ -1570,6 +1573,138 @@ public class OFSwitchHandshakeHandler implements IOFConnectionListener {
 	};
 
 
+	/**
+	 * The switch is in EQUAL role. 
+	 */
+	public class EqualState extends OFSwitchHandshakeState {
+
+		EqualState() {
+			super(true);
+		}
+
+		private long sendBarrier() {
+			long xid = handshakeTransactionIds--;
+			OFBarrierRequest barrier = factory.buildBarrierRequest()
+					.setXid(xid)
+					.build();
+			sw.write(barrier); /* don't use ListenableFuture here; we receive via barrier reply OR error (barrier unsupported) */
+			return xid;
+		}
+
+		@Override
+		void enterState() {
+			addDefaultFlows();
+			sendBarrier();
+			setSwitchStatus(SwitchStatus.EQUAL);
+			
+		}
+
+		@Override
+		void processOFError(OFErrorMsg m) {
+			// role changer will ignore the error if it isn't for it
+			boolean didHandle = roleChanger.deliverError(m);
+			if (didHandle)
+				return;
+			if ((m.getErrType() == OFErrorType.BAD_REQUEST) &&
+					(((OFBadRequestErrorMsg)m).getCode() == OFBadRequestCode.EPERM)) {
+				// We are the EQUAL controller and the switch returned
+				// a permission error. This is a likely indicator that
+				// the switch thinks we are slave. Reassert our
+				// role
+				// FIXME: this could be really bad during role transitions
+				// if two controllers are master (even if its only for
+				// a brief period). We might need to see if these errors
+				// persist before we reassert
+				switchManagerCounters.epermErrorWhileSwitchIsMaster.increment();
+				log.warn("Received permission error from switch {} while" +
+						"being master. Reasserting master role.",
+						getSwitchInfoString());
+				reassertRole(OFControllerRole.ROLE_EQUAL);
+			}
+			else if ((m.getErrType() == OFErrorType.FLOW_MOD_FAILED) &&
+					(((OFFlowModFailedErrorMsg)m).getCode() == OFFlowModFailedCode.ALL_TABLES_FULL)) {
+				sw.setTableFull(true);
+			}
+			else {
+				logError(m);
+			}
+			dispatchMessage(m);
+		}
+
+		@Override
+		void processOFExperimenter(OFExperimenter m) {
+			OFControllerRole role = extractNiciraRoleReply(m);
+			// If role == null it means the message wasn't really a
+			// Nicira role reply. We ignore just dispatch it to the
+			// OFMessage listenersa in this case.
+			if (role != null) {
+				roleChanger.deliverRoleReply(m.getXid(), role);
+			} else {
+				dispatchMessage(m);
+			}
+		}
+
+		@Override
+		void processOFRoleRequest(OFRoleRequest m) {
+			sendRoleRequest(m);
+		}
+
+		@Override
+		void processOFNiciraControllerRoleRequest(OFNiciraControllerRoleRequest m) {
+			OFControllerRole role;
+			switch (m.getRole()) {
+			case ROLE_MASTER:
+				role = OFControllerRole.ROLE_MASTER;
+				break;
+			case ROLE_SLAVE:
+				role = OFControllerRole.ROLE_SLAVE;
+				break;
+			case ROLE_OTHER:
+				role = OFControllerRole.ROLE_EQUAL;
+				break;
+			default:
+				log.error("Attempted to change to invalid Nicira role {}.", m.getRole().toString());
+				return;
+			}
+			/* 
+			 * This will get converted back to the correct factory of the switch later.
+			 * We will use OFRoleRequest though to simplify the API between OF versions.
+			 */
+			sendRoleRequest(OFFactories.getFactory(OFVersion.OF_13).buildRoleRequest()
+					.setGenerationId(U64.ZERO)
+					.setXid(m.getXid())
+					.setRole(role)
+					.build());
+		}
+
+		@Override
+		void processOFRoleReply(OFRoleReply m) {
+			roleChanger.deliverRoleReply(m.getXid(), m.getRole());
+		}
+
+		@Override
+		void processOFPortStatus(OFPortStatus m) {
+			handlePortStatusMessage(m, true);
+		}
+
+		@Override
+		void processOFPacketIn(OFPacketIn m) {
+			dispatchMessage(m);
+		}
+
+		@Override
+		void processOFFlowRemoved(OFFlowRemoved m) {
+			dispatchMessage(m);
+		}
+
+		@Override
+		void processOFStatsReply(OFStatsReply m) {
+			// TODO Auto-generated method stub
+			super.processOFStatsReply(m);
+		}
+	}
+	
+	
 	/**
 	 * Create a new unconnected OFChannelHandler.
 	 * @param controller

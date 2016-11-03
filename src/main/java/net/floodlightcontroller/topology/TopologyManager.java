@@ -762,7 +762,16 @@ public class TopologyManager implements IFloodlightModule, ITopologyService, IRo
 		public void transitionToActive() {
 			role = HARole.ACTIVE;
 			log.debug("Re-computing topology due " +
-					"to HA change from STANDBY->ACTIVE");
+					"to role change from STANDBY->ACTIVE");
+			newInstanceTask.reschedule(TOPOLOGY_COMPUTE_INTERVAL_MS,
+					TimeUnit.MILLISECONDS);
+		}
+		
+		@Override
+		public void transitionToEQUAL() {
+			role = HARole.EQUAL;
+			log.debug("Re-computing topology due " +
+					"to role change from STANDBY->EQUAL");
 			newInstanceTask.reschedule(TOPOLOGY_COMPUTE_INTERVAL_MS,
 					TimeUnit.MILLISECONDS);
 		}
@@ -1309,7 +1318,7 @@ public class TopologyManager implements IFloodlightModule, ITopologyService, IRo
 
 	public void informListeners(List<LDUpdate> linkUpdates) {
 
-		if (role != null && role != HARole.ACTIVE)
+		if (role != null && role != HARole.ACTIVE && role != HARole.EQUAL)
 			return;
 
 		for(int i=0; i < topologyAware.size(); ++i) {

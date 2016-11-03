@@ -431,6 +431,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 	 * Listens for HA notifications
 	 */
 	protected HAListenerDelegate haListenerDelegate;
+	public boolean isEqual;
 
 
 	// *********************
@@ -952,6 +953,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 	public void startUp(FloodlightModuleContext fmc)
 			throws FloodlightModuleException {
 		isMaster = (floodlightProvider.getRole() == HARole.ACTIVE);
+		isEqual = (floodlightProvider.getRole() == HARole.EQUAL);
 		primaryIndex = new DeviceUniqueIndex(entityClassifier.getKeyFields());
 		secondaryIndexMap = new HashMap<EnumSet<DeviceField>, DeviceIndex>();
 
@@ -988,7 +990,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 			}
 		};
 		storeConsolidateTask = new SingletonTask(ses, consolidateStoreRunner);
-		if (isMaster)
+		if (isMaster || isEqual)
 			storeConsolidateTask.reschedule(syncStoreConsolidateIntervalMs,
 					TimeUnit.MILLISECONDS);
 
@@ -1131,6 +1133,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		@Override
 		public void transitionToActive() {
 			DeviceManagerImpl.this.isMaster = true;
+			DeviceManagerImpl.this.isEqual = false;
 			DeviceManagerImpl.this.deviceSyncManager.goToMaster();
 		}
 
@@ -1164,6 +1167,14 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		public void transitionToStandby() {
 			DeviceManagerImpl.this.isMaster = false;
 		}
+
+		@Override
+		public void transitionToEQUAL() {
+			// TODO Auto-generated method stub
+			DeviceManagerImpl.this.isMaster = false;
+			DeviceManagerImpl.this.isEqual = true;			
+		}
+		
 	}
 
 
@@ -2305,7 +2316,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		  * @param d the device to store
 		  */
 		 public void storeDevice(Device d) {
-			 if (!isMaster)
+			 if (!isMaster && !isEqual)
 				 return;
 			 if (d == null)
 				 return;
@@ -2323,7 +2334,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		  */
 		 public void storeDeviceThrottled(Device d) {
 			 long intervalNs = syncStoreWriteIntervalMs*1000L*1000L;
-			 if (!isMaster)
+			 if (!isMaster && !isEqual)
 				 return;
 			 if (d == null)
 				 return;
@@ -2344,7 +2355,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		  * @param d
 		  */
 		 public void removeDevice(Device d) {
-			 if (!isMaster)
+			 if (!isMaster  && !isEqual)
 				 return;
 			 // FIXME: could we have a problem with concurrent put to the
 			 // hashMap? I.e., we write a stale entry to the map after the
@@ -2462,7 +2473,7 @@ public class DeviceManagerImpl implements IDeviceService, IOFMessageListener, IT
 		  * state to ensure we don't have stale entries in the store
 		  */
 		 private void consolidateStore() {
-			 if (!isMaster)
+			 if (!isMaster && !isEqual)
 				 return;
 			 cntConsolidateStoreRuns.increment();
 			 if (logger.isDebugEnabled()) {
